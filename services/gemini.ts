@@ -2,7 +2,7 @@
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { AdScenario } from "../types";
 
-// [API 키 연결 유지]
+// [API 키 연결]
 const getAIInstance = () => {
   const apiKey = localStorage.getItem('GEMINI_API_KEY');
   if (!apiKey) {
@@ -14,13 +14,10 @@ const getAIInstance = () => {
 export const checkApiKey = async (): Promise<boolean> => { return true; };
 export const promptForApiKey = async (): Promise<void> => {};
 
-/**
- * 사용자님의 커스텀 설정이 100% 적용된 시나리오 생성 함수
- */
 export const generateAdScenario = async (imagesBase64: string[], userGuidance: string = ""): Promise<AdScenario> => {
   const ai = getAIInstance();
   
-  // 사용자 정의 스키마 (그대로 유지)
+  // 사용자 정의 스키마 유지
   const responseSchema: Schema = {
     type: Type.OBJECT,
     properties: {
@@ -37,7 +34,6 @@ export const generateAdScenario = async (imagesBase64: string[], userGuidance: s
     required: ["title", "concept", "targetAudience", "marketingHook", "imagePrompts"],
   };
 
-  // 이미지 데이터 처리
   const imageParts = imagesBase64.map((data) => ({
     inlineData: {
       mimeType: "image/png", 
@@ -46,7 +42,7 @@ export const generateAdScenario = async (imagesBase64: string[], userGuidance: s
   }));
 
   try {
-    // 👇 사용자님이 주신 코드 블록 시작 (토씨 하나 안 틀리고 그대로 적용) 👇
+    // 👇 사용자 요청 코드 블록 (그대로 유지) 👇
     const response = await ai.models.generateContent({
       model: "gemini-3-pro-preview",
       contents: {
@@ -78,32 +74,47 @@ export const generateAdScenario = async (imagesBase64: string[], userGuidance: s
       config: {
         responseMimeType: "application/json",
         responseSchema: responseSchema,
-        thinkingConfig: { thinkingBudget: 2048 }, // Increased thinking budget for deeper narrative construction
+        thinkingConfig: { thinkingBudget: 2048 }, 
       },
     });
-    // 👆 사용자님이 주신 코드 블록 끝 👆
+    // 👆 사용자 요청 코드 블록 끝 👆
 
-    if (!response.text) {
-      throw new Error("Gemini 응답이 비어있습니다.");
+    // 🔥 [핵심 수정] 텍스트 추출 방식 변경 (Error: h.text is not a function 해결)
+    let rawText = "";
+
+    // Case 1: .text가 함수인 경우 (구버전)
+    if (typeof response.text === 'function') {
+      rawText = response.text();
+    } 
+    // Case 2: .text가 문자열 속성인 경우 (신버전 일부)
+    else if (typeof response.text === 'string') {
+      rawText = response.text;
+    } 
+    // Case 3: candidates 배열에서 직접 꺼내는 경우 (가장 안전)
+    else if (response.candidates && response.candidates[0]?.content?.parts) {
+       for (const part of response.candidates[0].content.parts) {
+         if (part.text) rawText += part.text;
+       }
     }
 
-    const text = response.text();
-    const jsonString = text.replace(/```json/g, "").replace(/```/g, "").trim();
+    if (!rawText) {
+      console.log("Response structure:", JSON.stringify(response, null, 2)); // 디버깅용 로그
+      throw new Error("Gemini 응답에서 텍스트를 찾을 수 없습니다.");
+    }
+
+    // JSON 파싱 (마크다운 코드블록 제거)
+    const jsonString = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
     return JSON.parse(jsonString) as AdScenario;
 
   } catch (e: any) {
     console.error("Scenario Error:", e);
-    // 모델명 관련 에러가 날 경우 힌트 제공
     if (e.message?.includes('404') || e.message?.includes('not found')) {
-        throw new Error(`모델(gemini-3-pro-preview)을 찾을 수 없습니다. (혹시 Private 모델이라면 해당 계정의 키를 사용해야 합니다)`);
+        throw new Error(`모델(gemini-3-pro-preview)을 찾을 수 없습니다. 계정 권한을 확인하세요.`);
     }
     throw new Error(`시나리오 생성 실패: ${e.message}`);
   }
 };
 
-/**
- * 이미지 생성 함수 (Imagen 3.0 설정 유지)
- */
 export const generateSingleImage = async (prompt: string): Promise<string> => {
   const ai = getAIInstance();
   try {
