@@ -1,3 +1,8 @@
+import { GoogleGenerativeAI } from "@google/generative-ai";
+
+// 여기를 수정했습니다: 로컬 스토리지에서 키를 가져오도록 변경
+const API_KEY = localStorage.getItem('GEMINI_API_KEY') || ""; 
+const genAI = new GoogleGenerativeAI(API_KEY);
 import { GoogleGenAI, Type, Schema } from "@google/genai";
 import { AdScenario } from "../types";
 
